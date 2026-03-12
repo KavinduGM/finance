@@ -38,9 +38,12 @@ export default function PortalPay() {
         ])
         setInvoice(invRes.data)
         setBankDetails(bankRes.data)
-        // Default to payhere if enabled
-        if (bankRes.data?.enabled_gateways?.includes('payhere') && !bankRes.data?.enabled_gateways?.includes('bank_transfer')) {
+        // Default tab: use invoice's payment_methods preference
+        const methods = invRes.data?.payment_methods || 'bank'
+        if ((methods === 'online' || methods === 'both') && bankRes.data?.enabled_gateways?.includes('payhere')) {
           setTab('payhere')
+        } else {
+          setTab('bank')
         }
       } catch {
         toast.error('Failed to load invoice')
@@ -141,7 +144,17 @@ export default function PortalPay() {
     </div>
   )
 
-  const enabledGateways: string[] = bankDetails?.enabled_gateways || ['bank_transfer']
+  // Which tabs to show: intersection of invoice's payment_methods and globally configured gateways
+  const globalGateways: string[] = bankDetails?.enabled_gateways || ['bank_transfer']
+  const invoiceMethods = invoice?.payment_methods || 'bank'
+  const wantsBank = invoiceMethods === 'bank' || invoiceMethods === 'both'
+  const wantsOnline = invoiceMethods === 'online' || invoiceMethods === 'both'
+  const enabledGateways: string[] = [
+    ...(wantsBank ? ['bank_transfer'] : []),
+    ...(wantsOnline && globalGateways.includes('payhere') ? ['payhere'] : []),
+  ].length > 0
+    ? [...(wantsBank ? ['bank_transfer'] : []), ...(wantsOnline && globalGateways.includes('payhere') ? ['payhere'] : [])]
+    : ['bank_transfer'] // fallback to bank if nothing resolved
 
   return (
     <div className="max-w-2xl mx-auto space-y-5">

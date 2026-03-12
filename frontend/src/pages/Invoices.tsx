@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { invoiceApi, clientApi, formatCurrency, SUPPORTED_CURRENCIES, CURRENCY_SYMBOLS } from '../services/api'
-import { Plus, Search, Send, CheckCircle, Download, Trash2, Edit2, X } from 'lucide-react'
+import { Plus, Search, Send, CheckCircle, Download, Trash2, Edit2, X, Building2, CreditCard } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { format } from 'date-fns'
 
@@ -30,7 +30,7 @@ export default function Invoices() {
     issue_date: format(new Date(), 'yyyy-MM-dd'),
     due_date: format(new Date(Date.now() + 30 * 86400000), 'yyyy-MM-dd'),
     items: [{ ...EMPTY_ITEM }], tax_rate: 0, discount: 0, notes: '', terms: '', status: 'Draft',
-    currency: 'LKR'
+    currency: 'LKR', payment_methods: 'bank'
   })
 
   useEffect(() => { load() }, [filterStatus, search])
@@ -43,7 +43,7 @@ export default function Invoices() {
 
   function openNew() {
     setEditing(null)
-    setForm({ client_name: '', client_email: '', client_address: '', client_company: '', issue_date: format(new Date(), 'yyyy-MM-dd'), due_date: format(new Date(Date.now() + 30 * 86400000), 'yyyy-MM-dd'), items: [{ ...EMPTY_ITEM }], tax_rate: 0, discount: 0, notes: '', terms: '', status: 'Draft', currency: 'LKR' })
+    setForm({ client_name: '', client_email: '', client_address: '', client_company: '', issue_date: format(new Date(), 'yyyy-MM-dd'), due_date: format(new Date(Date.now() + 30 * 86400000), 'yyyy-MM-dd'), items: [{ ...EMPTY_ITEM }], tax_rate: 0, discount: 0, notes: '', terms: '', status: 'Draft', currency: 'LKR', payment_methods: 'bank' })
     setModal(true)
   }
 
@@ -85,13 +85,32 @@ export default function Invoices() {
   }
 
   async function sendInvoice(inv: any) {
-    if (!inv.client_email) { toast.error('No client email set'); return }
-    const t = toast.loading('Sending invoice...')
+    const t = toast.loading('Sending to client portal...')
     try {
-      await invoiceApi.send(inv.id)
-      toast.success('Invoice sent!', { id: t })
+      const res = await invoiceApi.send(inv.id)
+      if (res.data.emailSent) {
+        toast.success('Invoice sent to portal & emailed!', { id: t })
+      } else {
+        toast.success('Invoice published to client portal ✓', { id: t })
+        if (inv.client_email) toast('Email delivery failed — check SMTP settings in Settings > Email', { icon: '⚠️' })
+      }
       load()
     } catch (err: any) { toast.error(err.response?.data?.error || 'Send failed', { id: t }) }
+  }
+
+  function togglePaymentMethod(method: 'bank' | 'online') {
+    const current = form.payment_methods || 'bank'
+    const hasBank = current === 'bank' || current === 'both'
+    const hasOnline = current === 'online' || current === 'both'
+    let next: string
+    if (method === 'bank') {
+      const newBank = !hasBank
+      next = newBank && hasOnline ? 'both' : newBank ? 'bank' : hasOnline ? 'online' : 'bank'
+    } else {
+      const newOnline = !hasOnline
+      next = hasBank && newOnline ? 'both' : newOnline ? 'online' : hasBank ? 'bank' : 'bank'
+    }
+    setForm((f: any) => ({ ...f, payment_methods: next }))
   }
 
   async function markPaid(inv: any) {
@@ -234,6 +253,33 @@ export default function Invoices() {
                   <div className="flex items-center justify-between gap-2"><span className="text-slate-500">Tax (%):</span><input className="input w-20 text-right" type="number" min="0" max="100" value={form.tax_rate} onChange={e => setForm({...form, tax_rate: e.target.value})} /></div>
                   <div className="flex items-center justify-between gap-2"><span className="text-slate-500">Discount:</span><input className="input w-28 text-right" type="number" min="0" value={form.discount} onChange={e => setForm({...form, discount: e.target.value})} /></div>
                   <div className="flex justify-between border-t pt-2 font-bold text-base"><span>Total:</span><span className="text-primary">{formatCurrency(total)}</span></div>
+                </div>
+              </div>
+
+              {/* Payment Methods */}
+              <div className="border border-slate-200 rounded-lg p-4 space-y-2">
+                <label className="label mb-1">Client Payment Options <span className="text-slate-400 font-normal">(shown on client portal)</span></label>
+                <div className="flex gap-5">
+                  <label className="flex items-center gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 accent-indigo-600"
+                      checked={form.payment_methods === 'bank' || form.payment_methods === 'both'}
+                      onChange={() => togglePaymentMethod('bank')}
+                    />
+                    <Building2 size={14} className="text-slate-500" />
+                    <span className="text-sm text-slate-700">Bank Transfer</span>
+                  </label>
+                  <label className="flex items-center gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 accent-indigo-600"
+                      checked={form.payment_methods === 'online' || form.payment_methods === 'both'}
+                      onChange={() => togglePaymentMethod('online')}
+                    />
+                    <CreditCard size={14} className="text-slate-500" />
+                    <span className="text-sm text-slate-700">Online Payment (PayHere)</span>
+                  </label>
                 </div>
               </div>
 

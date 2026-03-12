@@ -353,6 +353,7 @@ function initializeDatabase() {
   const migrations = [
     `ALTER TABLE invoices ADD COLUMN currency TEXT DEFAULT 'LKR'`,
     `ALTER TABLE invoices ADD COLUMN currency_symbol TEXT DEFAULT 'Rs.'`,
+    `ALTER TABLE invoices ADD COLUMN payment_methods TEXT DEFAULT 'bank'`,
     `ALTER TABLE revenue ADD COLUMN auto_recorded INTEGER DEFAULT 0`,
     `ALTER TABLE salary_payments ADD COLUMN currency TEXT DEFAULT 'LKR'`,
     `ALTER TABLE settings ADD COLUMN admin_username TEXT DEFAULT 'admin'`,

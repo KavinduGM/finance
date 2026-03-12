@@ -45,9 +45,9 @@ router.get('/:id', (req, res) => {
 router.post('/', (req, res) => {
   try {
     const {
-      client_name, client_email, client_address, client_company,
+      client_id, client_name, client_email, client_address, client_company,
       issue_date, due_date, items, tax_rate, discount, notes, terms, status,
-      currency = 'LKR'
+      currency = 'LKR', payment_methods = 'bank'
     } = req.body;
     const invoice_number = generateInvoiceNumber();
     const currency_symbol = CURRENCY_SYMBOLS[currency] || currency;
@@ -56,13 +56,13 @@ router.post('/', (req, res) => {
     const total = subtotal + tax_amount - (parseFloat(discount) || 0);
 
     const result = db.prepare(`
-      INSERT INTO invoices (invoice_number, client_name, client_email, client_address, client_company,
+      INSERT INTO invoices (invoice_number, client_id, client_name, client_email, client_address, client_company,
         issue_date, due_date, subtotal, tax_rate, tax_amount, discount, total,
-        status, notes, terms, currency, currency_symbol)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-    `).run(invoice_number, client_name, client_email, client_address, client_company,
+        status, notes, terms, currency, currency_symbol, payment_methods)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    `).run(invoice_number, client_id || null, client_name, client_email, client_address, client_company,
       issue_date, due_date, subtotal, tax_rate || 0, tax_amount, discount || 0, total,
-      status || 'Draft', notes, terms, currency, currency_symbol);
+      status || 'Draft', notes, terms, currency, currency_symbol, payment_methods);
 
     const invoiceId = result.lastInsertRowid;
     items.forEach(item => {
@@ -78,9 +78,9 @@ router.post('/', (req, res) => {
 router.put('/:id', (req, res) => {
   try {
     const {
-      client_name, client_email, client_address, client_company,
+      client_id, client_name, client_email, client_address, client_company,
       issue_date, due_date, items, tax_rate, discount, notes, terms, status, paid_date,
-      currency = 'LKR'
+      currency = 'LKR', payment_methods = 'bank'
     } = req.body;
     const currency_symbol = CURRENCY_SYMBOLS[currency] || currency;
     const subtotal = items.reduce((s, i) => s + (parseFloat(i.quantity) * parseFloat(i.unit_price)), 0);
@@ -88,13 +88,14 @@ router.put('/:id', (req, res) => {
     const total = subtotal + tax_amount - (parseFloat(discount) || 0);
 
     db.prepare(`
-      UPDATE invoices SET client_name=?, client_email=?, client_address=?, client_company=?,
+      UPDATE invoices SET client_id=?, client_name=?, client_email=?, client_address=?, client_company=?,
         issue_date=?, due_date=?, subtotal=?, tax_rate=?, tax_amount=?, discount=?, total=?,
-        status=?, notes=?, terms=?, paid_date=?, currency=?, currency_symbol=?, updated_at=CURRENT_TIMESTAMP
+        status=?, notes=?, terms=?, paid_date=?, currency=?, currency_symbol=?, payment_methods=?,
+        updated_at=CURRENT_TIMESTAMP
       WHERE id=?
-    `).run(client_name, client_email, client_address, client_company,
+    `).run(client_id || null, client_name, client_email, client_address, client_company,
       issue_date, due_date, subtotal, tax_rate || 0, tax_amount, discount || 0, total,
-      status, notes, terms, paid_date || null, currency, currency_symbol, req.params.id);
+      status, notes, terms, paid_date || null, currency, currency_symbol, payment_methods, req.params.id);
 
     db.prepare('DELETE FROM invoice_items WHERE invoice_id=?').run(req.params.id);
     items.forEach(item => {
@@ -114,21 +115,39 @@ router.delete('/:id', (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Send invoice via email
+// Send invoice to client portal (+ optional email notification)
 router.post('/:id/send', async (req, res) => {
   try {
     const inv = db.prepare('SELECT * FROM invoices WHERE id=?').get(req.params.id);
     if (!inv) return res.status(404).json({ error: 'Invoice not found' });
     inv.items = db.prepare('SELECT * FROM invoice_items WHERE invoice_id=?').all(inv.id);
-    const settings = db.prepare('SELECT * FROM settings WHERE id=1').get();
-    // Use the invoice's own currency symbol on PDF/email
-    const emailSettings = { ...settings, currency_symbol: inv.currency_symbol || settings.currency_symbol || 'Rs.' };
-    const pdfPath = await generateInvoicePDF(inv, emailSettings);
-    await sendInvoiceEmail(inv, pdfPath, emailSettings);
-    db.prepare(`UPDATE invoices SET status='Sent', email_sent=1, email_sent_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(inv.id);
-    db.prepare(`INSERT INTO notifications (type, title, message) VALUES ('success', 'Invoice Sent', ?)`)
-      .run(`Invoice ${inv.invoice_number} sent to ${inv.client_email}`);
-    res.json({ message: `Invoice sent to ${inv.client_email}` });
+
+    // ✅ ALWAYS update status to Sent first — invoice appears in client portal regardless of email
+    db.prepare(`UPDATE invoices SET status='Sent', updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(inv.id);
+    db.prepare(`INSERT INTO notifications (type, title, message) VALUES ('success', 'Invoice Sent to Portal', ?)`)
+      .run(`Invoice ${inv.invoice_number} is now visible in ${inv.client_name}'s client portal`);
+
+    // 📧 Try to send email — failure is non-fatal, portal visibility is already set
+    let emailSent = false;
+    if (inv.client_email) {
+      try {
+        const settings = db.prepare('SELECT * FROM settings WHERE id=1').get();
+        const emailSettings = { ...settings, currency_symbol: inv.currency_symbol || settings.currency_symbol || 'Rs.' };
+        const pdfPath = await generateInvoicePDF(inv, emailSettings);
+        await sendInvoiceEmail(inv, pdfPath, emailSettings);
+        db.prepare(`UPDATE invoices SET email_sent=1, email_sent_at=CURRENT_TIMESTAMP WHERE id=?`).run(inv.id);
+        emailSent = true;
+      } catch (emailErr) {
+        console.error('Invoice email failed (portal still updated):', emailErr.message);
+      }
+    }
+
+    res.json({
+      message: emailSent
+        ? `Invoice sent to client portal and emailed to ${inv.client_email}`
+        : `Invoice published to client portal${inv.client_email ? ' (email delivery failed — check SMTP settings)' : ''}`,
+      emailSent
+    });
   } catch (err) {
     console.error('Send invoice error:', err);
     res.status(500).json({ error: err.message });
