@@ -18,8 +18,10 @@ router.use(clientAuth);
 
 // Helper: SQL condition to match an invoice to a client by id OR email fallback
 // This handles invoices created before client_id was saved, or typed-in clients
+// alias='' means no table prefix (single-table queries), alias='i' means "i.column"
 function clientInvoiceWhere(alias = 'i') {
-  return `(${alias}.client_id=? OR (${alias}.client_id IS NULL AND ${alias}.client_email=?))`;
+  const p = alias ? `${alias}.` : '';
+  return `(${p}client_id=? OR (${p}client_id IS NULL AND ${p}client_email=?))`;
 }
 
 // ── Dashboard ──────────────────────────────────────────────────────────────
