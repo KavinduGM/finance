@@ -328,8 +328,8 @@ export default function PortalPay() {
 
       {/* Hidden PayHere form */}
       {payhereParams && (
-        <form ref={payhereFormRef} method="POST" action={payhereParams.action} className="hidden">
-          {Object.entries(payhereParams.fields || {}).map(([k, v]) => (
+        <form ref={payhereFormRef} method="POST" action={payhereParams.actionUrl} className="hidden">
+          {Object.entries(payhereParams.params || {}).map(([k, v]) => (
             <input key={k} type="hidden" name={k} value={String(v)} />
           ))}
         </form>

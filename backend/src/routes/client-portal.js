@@ -16,12 +16,20 @@ const uploadSlip = multer({ storage: slipStorage, limits: { fileSize: 10 * 1024 
 // All routes below require client auth
 router.use(clientAuth);
 
+// Helper: SQL condition to match an invoice to a client by id OR email fallback
+// This handles invoices created before client_id was saved, or typed-in clients
+function clientInvoiceWhere(alias = 'i') {
+  return `(${alias}.client_id=? OR (${alias}.client_id IS NULL AND ${alias}.client_email=?))`;
+}
+
 // ── Dashboard ──────────────────────────────────────────────────────────────
 router.get('/dashboard', (req, res) => {
   try {
-    const { clientId } = req.client;
+    const { clientId, clientEmail } = req.client;
 
-    const invoices = db.prepare(`SELECT * FROM invoices WHERE client_id=? ORDER BY created_at DESC`).all(clientId);
+    const invoices = db.prepare(
+      `SELECT * FROM invoices WHERE ${clientInvoiceWhere('')} AND status!='Draft' ORDER BY created_at DESC`
+    ).all(clientId, clientEmail || '');
     const totalPaid = invoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.total, 0);
     const totalPending = invoices.filter(i => i.status === 'Sent').reduce((s, i) => s + i.total, 0);
     const totalOverdue = invoices.filter(i => i.status === 'Overdue').reduce((s, i) => s + i.total, 0);
@@ -64,10 +72,10 @@ router.get('/dashboard', (req, res) => {
 // ── Invoices ───────────────────────────────────────────────────────────────
 router.get('/invoices', (req, res) => {
   try {
-    const { clientId } = req.client;
+    const { clientId, clientEmail } = req.client;
     const { status, month } = req.query;
-    let query = `SELECT i.*, GROUP_CONCAT(ii.description || '|' || ii.quantity || '|' || ii.unit_price || '|' || ii.amount, ';;') as items_raw FROM invoices i LEFT JOIN invoice_items ii ON ii.invoice_id = i.id WHERE i.client_id=?`;
-    const params = [clientId];
+    let query = `SELECT i.*, GROUP_CONCAT(ii.description || '|' || ii.quantity || '|' || ii.unit_price || '|' || ii.amount, ';;') as items_raw FROM invoices i LEFT JOIN invoice_items ii ON ii.invoice_id = i.id WHERE ${clientInvoiceWhere()} AND i.status!='Draft'`;
+    const params = [clientId, clientEmail || ''];
     if (status) { query += ' AND i.status=?'; params.push(status); }
     if (month) { query += ' AND strftime(\'%Y-%m\', i.issue_date)=?'; params.push(month); }
     query += ' GROUP BY i.id ORDER BY i.created_at DESC';
@@ -86,8 +94,8 @@ router.get('/invoices', (req, res) => {
 // ── Invoice detail ─────────────────────────────────────────────────────────
 router.get('/invoices/:id', (req, res) => {
   try {
-    const { clientId } = req.client;
-    const inv = db.prepare(`SELECT * FROM invoices WHERE id=? AND client_id=?`).get(req.params.id, clientId);
+    const { clientId, clientEmail } = req.client;
+    const inv = db.prepare(`SELECT * FROM invoices WHERE id=? AND ${clientInvoiceWhere('')}`).get(req.params.id, clientId, clientEmail || '');
     if (!inv) return res.status(404).json({ error: 'Invoice not found' });
     const items = db.prepare(`SELECT * FROM invoice_items WHERE invoice_id=?`).all(inv.id);
     res.json({ ...inv, items });
@@ -97,8 +105,8 @@ router.get('/invoices/:id', (req, res) => {
 // ── Invoice PDF download ───────────────────────────────────────────────────
 router.get('/invoices/:id/pdf', async (req, res) => {
   try {
-    const { clientId } = req.client;
-    const inv = db.prepare(`SELECT * FROM invoices WHERE id=? AND client_id=?`).get(req.params.id, clientId);
+    const { clientId, clientEmail } = req.client;
+    const inv = db.prepare(`SELECT * FROM invoices WHERE id=? AND ${clientInvoiceWhere('')}`).get(req.params.id, clientId, clientEmail || '');
     if (!inv) return res.status(404).json({ error: 'Invoice not found' });
     const items = db.prepare(`SELECT * FROM invoice_items WHERE invoice_id=?`).all(inv.id);
     const settings = db.prepare('SELECT * FROM settings WHERE id=1').get();
@@ -118,11 +126,11 @@ router.get('/bank-details', (req, res) => {
 // ── Submit payment slip ────────────────────────────────────────────────────
 router.post('/payment-slips', uploadSlip.single('slip'), (req, res) => {
   try {
-    const { clientId, clientName } = req.client;
+    const { clientId, clientName, clientEmail } = req.client;
     const { invoice_id, amount, currency, reference } = req.body;
     if (!req.file) return res.status(400).json({ error: 'Payment slip image is required' });
 
-    const inv = db.prepare(`SELECT * FROM invoices WHERE id=? AND client_id=?`).get(invoice_id, clientId);
+    const inv = db.prepare(`SELECT * FROM invoices WHERE id=? AND ${clientInvoiceWhere('')}`).get(invoice_id, clientId, clientEmail || '');
     if (!inv) return res.status(404).json({ error: 'Invoice not found' });
 
     // Check if already has a pending slip for this invoice
@@ -159,7 +167,7 @@ router.post('/payment/payhere/initiate', (req, res) => {
     const { clientId, clientName, clientEmail } = req.client;
     const { invoice_id } = req.body;
 
-    const inv = db.prepare(`SELECT * FROM invoices WHERE id=? AND client_id=?`).get(invoice_id, clientId);
+    const inv = db.prepare(`SELECT * FROM invoices WHERE id=? AND ${clientInvoiceWhere('')}`).get(invoice_id, clientId, clientEmail || '');
     if (!inv) return res.status(404).json({ error: 'Invoice not found' });
     if (inv.status === 'Paid') return res.status(400).json({ error: 'Invoice is already paid' });
 
