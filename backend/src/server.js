@@ -46,7 +46,12 @@ app.use('/api/portal-admin', require('./routes/portal-admin'));
 // Employee portal routes
 app.use('/api/employee', require('./routes/employee-auth'));
 app.use('/api/employee', require('./routes/employee-portal'));
+app.use('/api/employee', require('./routes/employee-tasks'));
 app.use('/api/employee-admin', require('./routes/employee-admin'));
+
+// Project & Task management routes
+app.use('/api/projects', require('./routes/projects'));
+app.use('/api/tasks', require('./routes/tasks'));
 
 // Serve payment slip uploads
 const fs = require('fs');

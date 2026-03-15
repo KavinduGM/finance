@@ -347,6 +347,77 @@ function initializeDatabase() {
       UNIQUE(employee_id, month),
       FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
     );
+
+    -- ── Project Management ─────────────────────────────────────────────────
+
+    CREATE TABLE IF NOT EXISTS project_types (
+      id   INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS projects (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      name        TEXT NOT NULL,
+      client_id   INTEGER,
+      client_name TEXT,
+      start_date  DATE,
+      status      TEXT DEFAULT 'active',
+      type_ids    TEXT DEFAULT '[]',
+      description TEXT,
+      created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (client_id) REFERENCES clients(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS tasks (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id       INTEGER,
+      title            TEXT NOT NULL,
+      description      TEXT,
+      assigned_to      INTEGER NOT NULL,
+      assigned_name    TEXT,
+      start_date       DATE,
+      due_date         DATE,
+      due_time         TEXT,
+      submission_link  TEXT,
+      priority         INTEGER DEFAULT 3,
+      status           TEXT DEFAULT 'pending',
+      timer_status     TEXT DEFAULT 'idle',
+      timer_started_at DATETIME,
+      total_seconds    INTEGER DEFAULT 0,
+      completed_at     DATETIME,
+      created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (project_id) REFERENCES projects(id),
+      FOREIGN KEY (assigned_to) REFERENCES employees(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS task_resources (
+      id      INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id INTEGER NOT NULL,
+      name    TEXT NOT NULL,
+      url     TEXT NOT NULL,
+      FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS calendar_events (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      title       TEXT NOT NULL,
+      description TEXT,
+      event_date  DATE NOT NULL,
+      event_time  TEXT,
+      color       TEXT DEFAULT 'blue',
+      created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS employee_notices (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      title        TEXT NOT NULL,
+      message      TEXT NOT NULL,
+      target       TEXT DEFAULT 'all',
+      employee_ids TEXT DEFAULT '[]',
+      is_active    INTEGER DEFAULT 1,
+      created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // === Migrations: add columns to existing tables if not present ===

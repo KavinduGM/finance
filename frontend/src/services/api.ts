@@ -227,4 +227,42 @@ export const employeeAdminApi = {
   deleteKpi: (id: number) => api.delete(`/employee-admin/kpi/${id}`),
 }
 
+// ── Project & Task Management API (admin) ─────────────────────────────────
+export const projectApi = {
+  types:      ()                   => api.get('/projects/types'),
+  addType:    (data: any)          => api.post('/projects/types', data),
+  deleteType: (id: number)         => api.delete(`/projects/types/${id}`),
+  list:       (params?: any)       => api.get('/projects', { params }),
+  stats:      ()                   => api.get('/projects/stats'),
+  create:     (data: any)          => api.post('/projects', data),
+  update:     (id: number, data: any) => api.put(`/projects/${id}`, data),
+  delete:     (id: number)         => api.delete(`/projects/${id}`),
+}
+
+export const taskAdminApi = {
+  list:         (params?: any)       => api.get('/tasks', { params }),
+  create:       (data: any)          => api.post('/tasks', data),
+  update:       (id: number, data: any) => api.put(`/tasks/${id}`, data),
+  delete:       (id: number)         => api.delete(`/tasks/${id}`),
+  setStatus:    (id: number, status: string) => api.put(`/tasks/${id}/status`, { status }),
+  calendar:     (month: string)      => api.get('/tasks/calendar', { params: { month } }),
+  listNotices:  ()                   => api.get('/tasks/notices'),
+  createNotice: (data: any)          => api.post('/tasks/notices', data),
+  updateNotice: (id: number, data: any) => api.put(`/tasks/notices/${id}`, data),
+  deleteNotice: (id: number)         => api.delete(`/tasks/notices/${id}`),
+  createEvent:  (data: any)          => api.post('/tasks/calendar/events', data),
+  updateEvent:  (id: number, data: any) => api.put(`/tasks/calendar/events/${id}`, data),
+  deleteEvent:  (id: number)         => api.delete(`/tasks/calendar/events/${id}`),
+}
+
+// ── Employee Task API (employee self-service) ─────────────────────────────
+export const employeeTaskApi = {
+  list:     (params?: any) => employeeAxios.get('/tasks', { params }),
+  notices:  ()             => employeeAxios.get('/tasks/notices'),
+  start:    (id: number)   => employeeAxios.post(`/tasks/${id}/start`),
+  hold:     (id: number)   => employeeAxios.post(`/tasks/${id}/hold`),
+  resume:   (id: number)   => employeeAxios.post(`/tasks/${id}/resume`),
+  complete: (id: number)   => employeeAxios.post(`/tasks/${id}/complete`),
+}
+
 export default api

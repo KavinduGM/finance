@@ -1,9 +1,14 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { employeeSelfApi as employeeApi } from '../../services/api'
-import { Wallet, CalendarDays, TrendingUp, Download, Bell, CheckCircle, AlertCircle, Clock } from 'lucide-react'
+import { employeeSelfApi as employeeApi, employeeTaskApi } from '../../services/api'
+import { Wallet, CalendarDays, TrendingUp, Download, Bell, CheckCircle, AlertCircle, Clock, Play, Pause, X, CheckSquare } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+
+function formatTime(secs: number) {
+  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+}
 
 const LEAVE_STATUS_COLORS: any = {
   Pending: 'bg-amber-100 text-amber-700',
@@ -15,21 +20,34 @@ export default function EmployeeDashboard() {
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [kpi, setKpi] = useState<any[]>([])
+  const [notices, setNotices] = useState<any[]>([])
+  const [todayTasks, setTodayTasks] = useState<any[]>([])
+  const [dismissedNotices, setDismissedNotices] = useState<Set<number>>(new Set())
+  const [ticks, setTicks] = useState(0)
 
   const info = (() => {
     try { return JSON.parse(localStorage.getItem('employee_info') || '{}') } catch { return {} }
   })()
 
   useEffect(() => { load() }, [])
+  useEffect(() => {
+    const id = setInterval(() => setTicks(t => t + 1), 1000)
+    return () => clearInterval(id)
+  }, [])
 
   async function load() {
     setLoading(true)
     try {
-      const [dashRes, kpiRes] = await Promise.all([
+      const today = new Date().toISOString().slice(0, 10)
+      const [dashRes, kpiRes, noticesRes, tasksRes] = await Promise.all([
         employeeApi.dashboard(),
-        employeeApi.kpi()
+        employeeApi.kpi(),
+        employeeTaskApi.notices().catch(() => ({ data: [] })),
+        employeeTaskApi.list({ date_from: today, date_to: today }).catch(() => ({ data: [] })),
       ])
       setData(dashRes.data)
+      setNotices(noticesRes.data || [])
+      setTodayTasks((tasksRes.data || []).filter((t: any) => !['completed','overdue'].includes(t.status)))
       // Build 6-month chart
       const months = Array.from({ length: 6 }, (_, i) => {
         const d = new Date()
@@ -45,6 +63,19 @@ export default function EmployeeDashboard() {
       })))
     } catch { toast.error('Failed to load dashboard') }
     finally { setLoading(false) }
+  }
+
+  async function timerAction(taskId: number, action: 'start'|'hold'|'resume'|'complete') {
+    try {
+      const res = action === 'complete'
+        ? await employeeTaskApi.complete(taskId)
+        : action === 'start' ? await employeeTaskApi.start(taskId)
+        : action === 'hold' ? await employeeTaskApi.hold(taskId)
+        : await employeeTaskApi.resume(taskId)
+      const updated = (res.data.task || res.data) as any
+      setTodayTasks(prev => prev.map(t => t.id === updated.id ? updated : t).filter(t => !['completed','overdue'].includes(t.status)))
+      if (action === 'complete') toast.success('Task completed! 🎉')
+    } catch (e: any) { toast.error(e.response?.data?.error || 'Action failed') }
   }
 
   async function downloadSlip(id: number, month: string) {
@@ -72,6 +103,81 @@ export default function EmployeeDashboard() {
 
   return (
     <div className="space-y-5 max-w-6xl mx-auto">
+      {/* Active Notices */}
+      {notices.filter(n => !dismissedNotices.has(n.id)).map(n => (
+        <div key={n.id} className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <Bell size={15} className="text-amber-600 mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-800">{n.title}</p>
+            <p className="text-xs text-amber-700 mt-0.5">{n.message}</p>
+          </div>
+          <button onClick={() => setDismissedNotices(prev => new Set([...prev, n.id]))} className="text-amber-400 hover:text-amber-600 shrink-0">
+            <X size={14} />
+          </button>
+        </div>
+      ))}
+
+      {/* Today's Tasks */}
+      {todayTasks.length > 0 && (
+        <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-slate-50">
+            <div className="flex items-center gap-2">
+              <CheckSquare size={15} className="text-emerald-500" />
+              <h3 className="text-sm font-semibold text-slate-700">Today's Tasks</h3>
+              <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{todayTasks.length}</span>
+            </div>
+            <Link to="/employee/tasks" className="text-xs text-emerald-600 hover:text-emerald-700 font-medium">View all</Link>
+          </div>
+          <div className="divide-y divide-slate-50">
+            {todayTasks.map((task: any) => {
+              const displaySecs = (task.total_seconds || 0) + (task.timer_status === 'running' && task.timer_started_at
+                ? Math.max(0, Math.floor((Date.now() - new Date(task.timer_started_at).getTime()) / 1000))
+                : 0)
+              // ticks used to keep timer live
+              void ticks
+              return (
+                <div key={task.id} className="flex items-center gap-3 px-5 py-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-700 truncate">{task.title}</p>
+                    {task.project_name && <p className="text-xs text-slate-400 mt-0.5">{task.project_name}</p>}
+                  </div>
+                  <span className={`text-xs font-mono font-bold ${task.timer_status === 'running' ? 'text-emerald-600' : 'text-slate-400'}`}>
+                    {formatTime(displaySecs)}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {task.status === 'pending' && (
+                      <button onClick={() => timerAction(task.id, 'start')} className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-lg">
+                        <Play size={12} />
+                      </button>
+                    )}
+                    {task.timer_status === 'running' && (
+                      <>
+                        <button onClick={() => timerAction(task.id, 'hold')} className="p-1.5 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-lg">
+                          <Pause size={12} />
+                        </button>
+                        <button onClick={() => timerAction(task.id, 'complete')} className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg">
+                          <CheckCircle size={12} />
+                        </button>
+                      </>
+                    )}
+                    {task.status === 'on_hold' && (
+                      <>
+                        <button onClick={() => timerAction(task.id, 'resume')} className="p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-lg">
+                          <Play size={12} />
+                        </button>
+                        <button onClick={() => timerAction(task.id, 'complete')} className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg">
+                          <CheckCircle size={12} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Welcome */}
       <div className="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-2xl p-5 text-white">
         <p className="text-emerald-100 text-sm">Welcome back,</p>

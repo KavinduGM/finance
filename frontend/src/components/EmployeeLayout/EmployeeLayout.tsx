@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Wallet, CalendarDays, BarChart3, Menu, X, LogOut, Briefcase, ChevronRight } from 'lucide-react'
+import { LayoutDashboard, Wallet, CalendarDays, BarChart3, Menu, X, LogOut, Briefcase, ChevronRight, CheckSquare } from 'lucide-react'
 
 const NAV = [
   { to: '/employee/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/employee/salaries', icon: Wallet, label: 'My Salaries' },
   { to: '/employee/leaves', icon: CalendarDays, label: 'Leave' },
   { to: '/employee/kpi', icon: BarChart3, label: 'My KPI' },
+  { to: '/employee/tasks', icon: CheckSquare, label: 'My Tasks' },
 ]
 
 export default function EmployeeLayout() {

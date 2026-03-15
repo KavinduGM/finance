@@ -96,6 +96,20 @@ cron.schedule('0 10 * * 0', async () => {
   } catch (err) { console.error('AI refresh error:', err); }
 });
 
+// Daily midnight: mark overdue tasks
+cron.schedule('0 0 * * *', () => {
+  try {
+    const result = db.prepare(`
+      UPDATE tasks SET status='overdue'
+      WHERE status NOT IN ('completed','overdue','cancelled')
+      AND due_date IS NOT NULL AND due_date < date('now')
+    `).run();
+    if (result.changes > 0) {
+      console.log(`⚠️  ${result.changes} task(s) marked overdue`);
+    }
+  } catch (err) { console.error('Task overdue check error:', err); }
+});
+
 // Daily midnight: check low cash balance alert
 cron.schedule('0 0 * * *', () => {
   try {

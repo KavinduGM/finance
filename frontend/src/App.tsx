@@ -23,6 +23,9 @@ import EmployeeDashboard from './pages/employee/EmployeeDashboard'
 import EmployeeSalaries from './pages/employee/EmployeeSalaries'
 import EmployeeLeaves from './pages/employee/EmployeeLeaves'
 import EmployeeKPI from './pages/employee/EmployeeKPI'
+import Projects from './pages/Projects'
+import Tasks from './pages/Tasks'
+import EmployeeTasks from './pages/employee/EmployeeTasks'
 
 function AdminGuard({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('admin_token')
@@ -60,6 +63,8 @@ export default function App() {
           <Route path="salaries" element={<Salaries />} />
           <Route path="recurring" element={<RecurringPayments />} />
           <Route path="clients" element={<Clients />} />
+          <Route path="projects" element={<Projects />} />
+          <Route path="tasks" element={<Tasks />} />
           <Route path="reports" element={<Reports />} />
           <Route path="settings" element={<Settings />} />
         </Route>
@@ -86,6 +91,7 @@ export default function App() {
           <Route path="salaries" element={<EmployeeSalaries />} />
           <Route path="leaves" element={<EmployeeLeaves />} />
           <Route path="kpi" element={<EmployeeKPI />} />
+          <Route path="tasks" element={<EmployeeTasks />} />
         </Route>
       </Routes>
     </BrowserRouter>

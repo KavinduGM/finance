@@ -1,7 +1,8 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, TrendingUp, FileText, Receipt, Users2,
-  RefreshCw, BarChart3, Settings, Users, Wallet, LogOut
+  RefreshCw, BarChart3, Settings, Users, Wallet, LogOut,
+  FolderKanban, CheckSquare
 } from 'lucide-react'
 
 const nav = [
@@ -12,6 +13,8 @@ const nav = [
   { to: '/salaries', icon: Wallet, label: 'Payroll' },
   { to: '/recurring', icon: RefreshCw, label: 'Recurring' },
   { to: '/clients', icon: Users, label: 'Clients' },
+  { to: '/projects', icon: FolderKanban, label: 'Projects' },
+  { to: '/tasks', icon: CheckSquare, label: 'Tasks' },
   { to: '/reports', icon: BarChart3, label: 'Reports' },
 ]
 
